@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>投球数カウンター</title>
+
+<style>
+body {
+    margin: 0;
+    background: black;
+    font-family: Arial, sans-serif;
+    display: flex;
+    height: 100vh;
+}
+
+/* 終ボタン */
+#endBtn {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 999999;
+    font-size: 14px;
+    padding: 6px 10px;
+    background: #666;
+    color: white;
+    border: none;
+    border-radius: 999px;
+}
+
+/* 戻ボタン */
+#undoBtn {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 999999;
+    font-size: 14px;
+    padding: 6px 10px;
+    background: #444;
+    color: white;
+    border: none;
+    border-radius: 999px;
+}
+
+/* 左右エリア */
+.half {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.label {
+    position: absolute;
+    top: 10px;
+    color: white;
+    font-size: 5vw;
+    font-weight: bold;
+}
+
+.display {
+    margin-top: 8vh;
+    font-size: 32vw;
+    font-weight: bold;
+    color: yellow;
+    cursor: pointer;
+}
+
+/* 下部 */
+.bottomArea {
+    position: absolute;
+    bottom: 20px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    box-sizing: border-box;
+}
+
+.saved {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    flex: 1;
+}
+
+.saved button {
+    margin: 2px;
+    padding: 4px 6px;
+    font-size: 0.9rem;
+}
+
+.change {
+    background: #2196F3;
+    color: white;
+    font-size: 1rem;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: none;
+}
+
+.minus {
+    background: #f44336;
+    color: white;
+    font-size: 1.1rem;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: none;
+}
+</style>
+</head>
+
+<body>
+
+<button id="endBtn">終</button>
+<button id="undoBtn">戻</button>
+
+<div class="half">
+    <div class="label">一塁側</div>
+    <div id="leftDisplay" class="display">00</div>
+
+    <div class="bottomArea">
+        <button class="change" id="leftChange">交代</button>
+        <div id="leftSaved" class="saved"></div>
+        <button class="minus" id="leftMinus">-1</button>
+    </div>
+</div>
+
+<div class="half">
+    <div class="label">三塁側</div>
+    <div id="rightDisplay" class="display">00</div>
+
+    <div class="bottomArea">
+        <button class="change" id="rightChange">交代</button>
+        <div id="rightSaved" class="saved"></div>
+        <button class="minus" id="rightMinus">-1</button>
+    </div>
+</div>
+
+<script>
+let data;
+let backupData = null;
+
+try {
+    data = JSON.parse(localStorage.getItem("pitchData"));
+} catch(e) {
+    data = null;
+}
+
+if(!data){
+    data = {
+        left: { current: 0, saved: [] },
+        right: { current: 0, saved: [] }
+    };
+}
+
+function save(){
+    localStorage.setItem("pitchData", JSON.stringify(data));
+}
+
+function updateDisplay(side){
+    document.getElementById(side+"Display").textContent =
+        data[side].current.toString().padStart(2,'0');
+}
+
+function renderSaved(side){
+    const area = document.getElementById(side+"Saved");
+    area.innerHTML="";
+
+    data[side].saved.forEach((val, i)=>{
+        const btn=document.createElement("button");
+        btn.textContent=val;
+
+        btn.addEventListener("click", ()=>{
+            const temp = data[side].current;
+            data[side].current = data[side].saved[i];
+            data[side].saved[i] = temp;
+
+            updateDisplay(side);
+            renderSaved(side);
+            save();
+        });
+
+        area.appendChild(btn);
+    });
+}
+
+function change(side,delta){
+    data[side].current+=delta;
+    if(data[side].current<0) data[side].current=0;
+    if(data[side].current>99) data[side].current=99;
+    updateDisplay(side);
+    save();
+}
+
+function pitcherChange(side){
+    if(data[side].current>0){
+        data[side].saved.unshift(data[side].current);
+        if(data[side].saved.length>4) data[side].saved.pop();
+    }
+    data[side].current=0;
+    updateDisplay(side);
+    renderSaved(side);
+    save();
+}
+
+/* 操作 */
+document.getElementById("leftDisplay").addEventListener("click", ()=>change("left",1));
+document.getElementById("rightDisplay").addEventListener("click", ()=>change("right",1));
+
+document.getElementById("leftMinus").addEventListener("click", ()=>change("left",-1));
+document.getElementById("rightMinus").addEventListener("click", ()=>change("right",-1));
+
+document.getElementById("leftChange").addEventListener("click", ()=>pitcherChange("left"));
+document.getElementById("rightChange").addEventListener("click", ()=>pitcherChange("right"));
+
+/* 終ボタン（退避→リセット） */
+document.getElementById("endBtn").addEventListener("click", ()=>{
+    backupData = JSON.parse(JSON.stringify(data));
+
+    data = {
+        left: { current: 0, saved: [] },
+        right: { current: 0, saved: [] }
+    };
+
+    save();
+
+    ["left","right"].forEach(s=>{
+        updateDisplay(s);
+        renderSaved(s);
+    });
+});
+
+/* 戻ボタン（入れ替え） */
+document.getElementById("undoBtn").addEventListener("click", ()=>{
+    if(!backupData) return;
+
+    const temp = JSON.parse(JSON.stringify(data));
+    data = backupData;
+    backupData = temp;
+
+    save();
+
+    ["left","right"].forEach(s=>{
+        updateDisplay(s);
+        renderSaved(s);
+    });
+});
+
+/* 初期表示 */
+["left","right"].forEach(s=>{
+    updateDisplay(s);
+    renderSaved(s);
+});
+</script>
+
+</body>
+</html>
